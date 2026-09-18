@@ -1,113 +1,121 @@
-import tkinter as tk
-from tkinter import ttk, messagebox
 import os
+import tkinter as tk
+from tkinter import messagebox
+from src.database.users import buscar_usuario_dbf
+from src.utils.security import hb_decrypt
 
-# 1. Obtener la ruta hasta la carpeta 'src'
-SRC_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RUTA_LLAVES = os.path.join(SRC_DIR, "assets", "llaves.png")
 
 class LoginVentana(tk.Toplevel):
+
     def __init__(self, parent):
         super().__init__(parent)
-        self.parent = parent  # Guardamos la referencia al padre (main.py)
-        self.login_exitoso = False
+        self.parent = parent
+        self.title("Acceso al Sistema")
 
-        self.title("Ingreso al sistema")
+        # Tamaños y centrado en pantalla
+        ancho = 420
+        alto = 220
+        pos_x = (self.winfo_screenwidth() // 2) - (ancho // 2)
+        pos_y = (self.winfo_screenheight() // 2) - (alto // 2)
+        self.geometry(f"{ancho}x{alto}+{pos_x}+{pos_y}")
         self.resizable(False, False)
 
-        # Configuración modal
+        # Cargar ícono de la ventana si existe
+        base_dir = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        )
+        ico_path = os.path.join(base_dir, "src", "assets", "Sueldos.ico")
+        if os.path.exists(ico_path):
+            self.iconbitmap(ico_path)
+
+        # Configurar modalidad
         self.transient(parent)
         self.grab_set()
+
+        self.intentos = 0
+        self.login_exitoso = False
+
+        self.crear_widgets(base_dir)
+
+        # Evento al cerrar (X)
         self.protocol("WM_DELETE_WINDOW", self.al_cerrar)
 
-        # Dimensions y centrado
-        ancho_ventana = 450
-        alto_ventana = 280
-        ancho_pantalla = self.winfo_screenwidth()
-        alto_pantalla = self.winfo_screenheight()
-        pos_x = int((ancho_pantalla / 2) - (ancho_ventana / 2))
-        pos_y = int((alto_pantalla / 2) - (alto_ventana / 2))
-        self.geometry(f"{ancho_ventana}x{alto_ventana}+{pos_x}+{pos_y}")
-        
-        # Color celeste de fondo idéntico a tu pantalla original
-        COLOR_FONDO = "#87CEEB"
-        self.configure(bg=COLOR_FONDO)
+    def crear_widgets(self, base_dir):
+        # Frame principal (2 columnas)
+        frame_main = tk.Frame(self)
+        frame_main.pack(expand=True, fill="both", padx=15, pady=15)
 
-        # Contenedor Principal
-        frame_principal = tk.Frame(self, bg=COLOR_FONDO)
-        frame_principal.pack(fill="both", expand=True, padx=15, pady=15)
+        # Columna Izquierda: Imagen
+        img_path = os.path.join(base_dir, "src", "assets", "llaves.png")
+        if os.path.exists(img_path):
+            self.img_llaves = tk.PhotoImage(file=img_path)
+            if self.img_llaves.width() > 150:
+                self.img_llaves = self.img_llaves.subsample(2, 2)
+            lbl_img = tk.Label(frame_main, image=self.img_llaves)
+            lbl_img.pack(side="left", padx=(0, 15))
 
-        # --- PANEL IZQUIERDO: Imagen (Opcional) ---
-        frame_imagen = tk.Frame(frame_principal, bg=COLOR_FONDO)
-        frame_imagen.pack(side="left", padx=(0, 15))
+        # Columna Derecha: Formulario
+        frame_form = tk.Frame(frame_main)
+        frame_form.pack(side="right", expand=True, fill="both")
 
-        # Si colocas un archivo 'llaves.png' en la raíz, se mostrará automáticamente
-        if os.path.exists(RUTA_LLAVES):
-           # Guardamos la imagen en 'self.img' para que Python no la borre de memoria (Garbage Collector)
-           self.img = tk.PhotoImage(file=RUTA_LLAVES)
-           lbl_img = tk.Label(frame_imagen, image=self.img, bg=COLOR_FONDO)
-           lbl_img.pack()
-        else:
-           # Si por alguna razón la imagen no existe en disco, muestra un texto alternativo
-           lbl_img = tk.Label(frame_imagen, text="[ Logo ]", bg=COLOR_FONDO)
-           lbl_img.pack()
+        lbl_usuario = tk.Label(frame_form, text="Usuario:", anchor="w")
+        lbl_usuario.pack(fill="x", pady=(5, 2))
 
-        # --- PANEL DERECHO: Campos de Entrada ---
-        frame_campos = tk.LabelFrame(frame_principal, bg=COLOR_FONDO, bd=1, relief="solid")
-        frame_campos.pack(side="right", fill="both", expand=True, padx=5, pady=5)
+        self.txt_usuario = tk.Entry(frame_form)
+        self.txt_usuario.pack(fill="x", pady=(0, 10))
+        self.txt_usuario.focus_set()
 
-        # Usuario
-        tk.Label(frame_campos, text="Usuario", font=("Arial", 9, "bold"), bg=COLOR_FONDO).grid(row=0, column=0, sticky="w", padx=10, pady=8)
-        self.txt_usuario = tk.Entry(frame_campos, font=("Arial", 10), bg="#E0F7FA") # Tono verdoso claro al enfocar
-        self.txt_usuario.grid(row=0, column=1, padx=10, pady=8, sticky="ew")
+        lbl_clave = tk.Label(frame_form, text="Clave:", anchor="w")
+        lbl_clave.pack(fill="x", pady=(0, 2))
 
-        # Password
-        tk.Label(frame_campos, text="Password", font=("Arial", 9, "bold"), bg=COLOR_FONDO).grid(row=1, column=0, sticky="w", padx=10, pady=8)
-        self.txt_password = tk.Entry(frame_campos, font=("Arial", 10), show="*")
-        self.txt_password.grid(row=1, column=1, padx=10, pady=8, sticky="ew")
+        self.txt_clave = tk.Entry(frame_form, show="*")
+        self.txt_clave.pack(fill="x", pady=(0, 15))
 
-        # Empresas (Desplegable Combo)
-        tk.Label(frame_campos, text="Empresas", font=("Arial", 9, "bold"), bg=COLOR_FONDO).grid(row=2, column=0, sticky="w", padx=10, pady=8)
-        self.combo_empresas = ttk.Combobox(frame_campos, state="readonly", font=("Arial", 9))
-        self.combo_empresas['values'] = ("MEDANO VIATICOS", "EMPRESA PRUEBA S.A.") # Carga estática inicial
-        self.combo_empresas.current(0)
-        self.combo_empresas.grid(row=2, column=1, padx=10, pady=8, sticky="ew")
-
-        frame_campos.columnconfigure(1, weight=1)
-
-        # --- BOTONES SUPERIORES / INFERIORES ---
-        frame_botones = tk.Frame(self, bg=COLOR_FONDO)
-        frame_botones.pack(fill="x", side="bottom", padx=15, pady=(0, 15))
-
-        btn_salir = tk.Button(frame_botones, text="Salir", width=10, command=self.al_cerrar)
-        btn_salir.pack(side="right", padx=5)
-
-        btn_ok = tk.Button(frame_botones, text="OK", width=10, command=self.validar_ingreso)
-        btn_ok.pack(side="right", padx=5)
-
-        # Configuración modal y foco al FINAL de __init__
-        self.transient(parent)
-        self.grab_set()
-
-        # Forzar el foco a la ventana y luego al Entry
-        self.after(100, self.activar_foco_inicial)
-
-    def activar_foco_inicial(self):
-        self.focus_force()            # Fuerza la ventana activa en Windows
-        self.txt_usuario.focus_set()  # Coloca el cursor en el Entry
+        btn_ingresar = tk.Button(
+            frame_form, text="Ingresar", command=self.validar_ingreso
+        )
+        btn_ingresar.pack(fill="x")
 
     def validar_ingreso(self):
-        usuario = self.txt_usuario.get()
-        clave = self.txt_password.get()
+        usuario = self.txt_usuario.get().strip()
+        clave_ingresada = self.txt_clave.get().strip()
 
-        # Ejemplo simple de validación (luego conectarás con MySQL)
-        if usuario != "" and clave != "":
-            self.login_exitoso = True
-            self.grab_release() # Libera el bloqueo modal
-            self.destroy()      # Cierra la ventana de login
+        if not usuario or not clave_ingresada:
+            messagebox.showwarning(
+                "Atención", "Por favor ingrese usuario y clave"
+            )
+            return
+
+        # Búsqueda en la DBF
+        registro = buscar_usuario_dbf(usuario, r"G:\Proyectos\datos\USERS.DBF")
+
+        print("\n--- DEBUG LOGIN ---")
+        print("Registro DBF:", registro)
+
+        if registro:
+            clave_dbf = registro.get("CLAVE", "").strip()
+            clave_descifrada = hb_decrypt(clave_dbf)
+
+            print("Clave tipeada     :", repr(clave_ingresada))
+            print("Clave desencriptada:", repr(clave_descifrada))
+            print("--------------------\n")
+
+            if clave_ingresada.upper() == clave_descifrada.upper():
+                self.login_exitoso = True
+                self.al_cerrar()
+                return
+
+        self.intentos += 1
+        if self.intentos >= 3:
+            messagebox.showerror(
+                "Error", "Límite de intentos alcanzado. El sistema se cerrará."
+            )
+            self.al_cerrar()
         else:
-            messagebox.showwarning("Atención", "Debe completar usuario y contraseña")
+            messagebox.showwarning("Error", "Usuario o clave incorrecta")
+            self.txt_clave.delete(0, tk.END)
+            self.txt_usuario.focus_set()
 
     def al_cerrar(self):
-        self.grab_release()     # Libera el foco modal
-        self.parent.destroy()   # Destruye la ventana principal (cerrando la app completa)        
+        self.grab_release()
+        self.parent.destroy()
