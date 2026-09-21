@@ -3,7 +3,7 @@ from dbfread import DBF
 
 
 def buscar_usuario_dbf(
-    nombre_usuario, ruta_dbf=r"G:\Proyectos\datos\USERS.DBF"
+    nombre_usuario, ruta_dbf=r"S:\antonio\sistema\Resipol\SUELDOS\USERS.DBF"
 ):
     """Busca un usuario en la DBF devolviendo los campos en formato byte (raw)."""
     try:
