@@ -25,3 +25,23 @@ def buscar_usuario_dbf(
     except Exception as e:
         print(f"Error leyendo la tabla DBF: {e}")
     return None
+
+def obtener_empresas_dbf(
+    ruta_dbf=r"S:\antonio\sistema\Resipol\SUELDOS\EMPRESAS.DBF",
+) -> list[str]:
+    """Lee el campo EMPRESA de la tabla de empresas de Harbour."""
+    empresas = []
+    try:
+        table = DBF(
+            ruta_dbf,
+            encoding="cp850",
+            ignore_missing_memofile=True,
+            char_decode_errors="ignore",
+        )
+        for record in table:
+            nombre_empresa = str(record.get("EMPRESA", "")).strip()
+            if nombre_empresa:
+                empresas.append(nombre_empresa)
+    except Exception as e:
+        print(f"Error leyendo EMPRESAS.DBF: {e}")
+    return empresas
