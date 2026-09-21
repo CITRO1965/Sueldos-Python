@@ -2,7 +2,7 @@ import os
 import tkinter as tk
 from tkinter import messagebox
 from src.database.users import buscar_usuario_dbf
-from src.utils.security import hb_decrypt
+from src.utils.security import hb_descend
 
 
 class LoginVentana(tk.Toplevel):
@@ -86,25 +86,34 @@ class LoginVentana(tk.Toplevel):
             )
             return
 
-        # Búsqueda en la DBF
-        registro = buscar_usuario_dbf(usuario, r"G:\Proyectos\datos\USERS.DBF")
+        registro = buscar_usuario_dbf(usuario, r"S:\antonio\sistema\Resipol\SUELDOS\USERS.DBF")
 
         print("\n--- DEBUG LOGIN ---")
-        print("Registro DBF:", registro)
+        print("Registro DBF (RAW):", registro)
 
         if registro:
-            clave_dbf = registro.get("CLAVE", "").strip()
-            clave_descifrada = hb_decrypt(clave_dbf)
+            # 1. Obtenemos los bytes puros del campo CLAVE
+            clave_bytes = registro.get("CLAVE", b"")
+
+            # 2. Replicamos: Left( users->clave, at( chr(224), users->clave ) - 1 )
+            pos_delimitador = clave_bytes.find(b"\xe0")
+            if pos_delimitador != -1:
+                clave_dbf_recortada = clave_bytes[:pos_delimitador]
+            else:
+                clave_dbf_recortada = clave_bytes.strip()
+
+            # 3. Desencriptamos sumando el desfase exacto
+            clave_desencriptada = hb_descend(clave_dbf_recortada).strip()
 
             print("Clave tipeada     :", repr(clave_ingresada))
-            print("Clave desencriptada:", repr(clave_descifrada))
+            print("Clave DBF desc.   :", repr(clave_desencriptada))
             print("--------------------\n")
 
-            if clave_ingresada.upper() == clave_descifrada.upper():
+            if clave_ingresada.upper() == clave_desencriptada.upper():
                 self.login_exitoso = True
                 self.al_cerrar()
                 return
-
+            
         self.intentos += 1
         if self.intentos >= 3:
             messagebox.showerror(
