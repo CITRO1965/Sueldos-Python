@@ -1,9 +1,9 @@
 import os
 import tkinter as tk
 from tkinter import messagebox, ttk
-from src.database.users import buscar_usuario_dbf, obtener_empresas_dbf
+from src.database.users import buscar_usuario_dbf, obtener_empresas_dbf, buscar_empresa_detalles_dbf
 from src.utils.security import hb_descend
-
+from src.context import contexto_app
 
 class LoginVentana(tk.Toplevel):
 
@@ -90,6 +90,87 @@ class LoginVentana(tk.Toplevel):
         )
         btn_ingresar.pack(fill="x")
 
+    def validar_ingreso(self):
+            usuario = self.txt_usuario.get().strip().upper()
+            clave = self.txt_clave.get().strip()
+            empresa_seleccionada = self.cbo_empresas.get().strip()
+
+            if not usuario or not clave:
+                messagebox.showwarning("Atención", "Debe ingresar usuario y contraseña.")
+                return
+
+            # 1. Buscar usuario en USERS.DBF
+            user_db = buscar_usuario_dbf(usuario)
+
+            if not user_db:
+                messagebox.showerror("Error", "Usuario no encontrado.")
+                return
+
+            # 2. Extraer la clave en raw/bytes
+            clave_raw = (
+                user_db.get("clave_raw")
+                or user_db.get("clave")
+                or user_db.get("CLAVE")
+                or user_db.get("clave_bytes")
+            )
+
+            if isinstance(clave_raw, str):
+                clave_raw = clave_raw.encode("cp850", errors="ignore")
+
+            # =========================================================
+            # SECCIÓN A MODIFICAR: DESENCRIPTACIÓN Y DEPURACIÓN
+            # =========================================================
+            # 3. Desencriptar clave Harbour
+            clave_desencriptada = hb_descend(clave_raw)
+
+            # Normalizamos ambas claves (mayúsculas y sin espacios)
+            clave_ingresada_clean = clave.strip().upper()
+            clave_bd_clean = clave_desencriptada.strip().upper()
+
+            # Imprimimos en la Terminal para ver la diferencia exactas
+            print("\n--- DEPURACIÓN DE CONTRASEÑA ---")
+            print(f"Clave ingresada en pantalla : '{clave_ingresada_clean}'")
+            print(f"Clave desencriptada de BD  : '{clave_bd_clean}'")
+            print(f"Bytes puros del DBF        : {clave_raw}")
+            print("--------------------------------\n")
+
+            # 4. Comparar contraseña
+            if clave_ingresada_clean != clave_bd_clean:
+                messagebox.showerror(
+                    "Error de Autenticación",
+                    f"Contraseña incorrecta.\n\nIngresada: '{clave_ingresada_clean}'\nDesencriptada BD: '{clave_bd_clean}'"
+                )
+                return
+            # =========================================================
+
+            # 5. Si la clave coincide, continuar con la empresa
+            datos_empresa = buscar_empresa_detalles_dbf(empresa_seleccionada)
+
+            if datos_empresa:
+                try:
+                    ruta_final = contexto_app.establecer_empresa(
+                        nombre_empresa=datos_empresa["empresa"],
+                        directorio_relativo=datos_empresa["directorio"],
+                    )
+                    contexto_app.usuario = usuario
+
+                    if not os.path.exists(ruta_final):
+                        messagebox.showerror(
+                            "Error de Directorio",
+                            f"La carpeta de la empresa no existe:\n{ruta_final}",
+                        )
+                        return
+
+                    # 6. Transición a la Ventana Principal
+                    self.destroy()
+                    app_main = VentanaPrincipal()
+                    app_main.mainloop()
+
+                except Exception as e:
+                    messagebox.showerror("Error de Configuración", str(e))
+            else:
+                messagebox.showerror("Error", "No se encontró la configuración de la empresa.")
+                
     def cargar_empresas(self):
         """Replica la lógica de Harbour leyendo empresas->empresa."""
         lista_empresas = obtener_empresas_dbf(r"S:\antonio\sistema\Resipol\SUELDOS\EMPRESAS.DBF")
@@ -106,52 +187,51 @@ class LoginVentana(tk.Toplevel):
             # Replicamos: frmLogin.cboElige.value := nElige (Seleccionar la primera empresa)
             self.cbo_empresas.current(0)
 
-    def validar_ingreso(self):
-        usuario = self.txt_usuario.get().strip()
-        clave_ingresada = self.txt_clave.get().strip()
-        empresa = self.cbo_empresas.get()
-
-        if not usuario or not clave_ingresada:
-            messagebox.showwarning(
-                "Atención", "Por favor ingrese usuario y clave"
-            )
-            return
-
-        if not empresa:
-            messagebox.showwarning(
-                "Atención", "Debe seleccionar una empresa"
-            )
-            return
-
-        registro = buscar_usuario_dbf(usuario, r"S:\antonio\sistema\Resipol\SUELDOS\USERS.DBF")
-
-        if registro:
-            clave_bytes = registro.get("CLAVE", b"")
-            pos_delimitador = clave_bytes.find(b"\xe0")
-            if pos_delimitador != -1:
-                clave_dbf_recortada = clave_bytes[:pos_delimitador]
-            else:
-                clave_dbf_recortada = clave_bytes.strip()
-
-            clave_desencriptada = hb_descend(clave_dbf_recortada).strip()
-
-            if clave_ingresada.upper() == clave_desencriptada.upper():
-                self.login_exitoso = True
-                self.empresa_seleccionada = empresa
-                self.al_cerrar()
-                return
-
-        self.intentos += 1
-        if self.intentos >= 3:
-            messagebox.showerror(
-                "Error", "Límite de intentos alcanzado. El sistema se cerrará."
-            )
-            self.al_cerrar()
-        else:
-            messagebox.showwarning("Error", "Usuario o clave incorrecta")
-            self.txt_clave.delete(0, tk.END)
-            self.txt_usuario.focus_set()
 
     def al_cerrar(self):
         self.grab_release()
         self.parent.destroy()
+
+        # Ejemplo de fragmento dentro de la validación del Login en src/ui/login.py
+
+    def al_confirmar_login(self):
+       usuario = self.txt_usuario.get().strip()
+       clave = self.txt_clave.get().strip()
+       empresa_seleccionada = self.cbo_empresa.get().strip()
+
+       if self.validar_credenciales(usuario, clave):
+          datos_empresa = buscar_empresa_detalles_dbf(empresa_seleccionada)
+
+          if datos_empresa:
+             try:
+                ruta_final = contexto_app.establecer_empresa(
+                    nombre_empresa=datos_empresa["empresa"],
+                    directorio_relativo=datos_empresa["directorio"],
+                )
+                contexto_app.usuario = usuario
+
+                # Buscamos los archivos DBF en la carpeta resuelta
+                if os.path.exists(ruta_final):
+                    archivos = [f for f in os.listdir(ruta_final) if f.upper().endswith(".DBF")]
+                    lista_tablas = ", ".join(archivos[:4]) if archivos else "No se encontraron DBFs"
+                    
+                    # Cartel informativo en pantalla
+                    messagebox.showinfo(
+                        "Conexión Exitosa a Empresa",
+                        f"Empresa: {contexto_app.empresa_nombre}\n"
+                        f"Es Viáticos: {contexto_app.es_viaticos}\n\n"
+                        f"Ruta DBF Resuelta:\n{ruta_final}\n\n"
+                        f"Tablas detectadas ({len(archivos)}):\n{lista_tablas}"
+                    )
+                else:
+                    messagebox.showerror("Error", f"La carpeta no existe:\n{ruta_final}")
+                    return
+
+                self.destroy()
+                app_main = VentanaPrincipal()
+                app_main.mainloop()
+
+             except Exception as e:
+                 messagebox.showerror("Error de Configuración", str(e))
+          else:
+               messagebox.showerror("Error", "No se encontró la configuración de la empresa.")

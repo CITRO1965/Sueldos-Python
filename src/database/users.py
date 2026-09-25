@@ -1,5 +1,7 @@
 # src/database/users.py
+import os
 from dbfread import DBF
+from src.utils.config import obtener_path_base_ini
 
 
 def buscar_usuario_dbf(
@@ -45,3 +47,35 @@ def obtener_empresas_dbf(
     except Exception as e:
         print(f"Error leyendo EMPRESAS.DBF: {e}")
     return empresas
+
+def buscar_empresa_detalles_dbf(nombre_empresa: str, ruta_ini: str = "SUELDOS.INI"):
+    """
+    Lee el PATH base definido en SUELDOS.INI, localiza EMPRESAS.DBF en esa ubicación
+    y retorna el subdirectorio de la empresa seleccionada.
+    """
+    # 1. Obtener S:\ANTONIO\SISTEMA\RESIPOL\SUELDOS desde SUELDOS.INI
+    path_base = obtener_path_base_ini(ruta_ini)
+    ruta_empresas_dbf = os.path.join(path_base, "EMPRESAS.DBF")
+
+    # Verificación de existencia del archivo en el servidor/red
+    if not os.path.exists(ruta_empresas_dbf):
+        # Intenta en minúsculas por compatibilidad
+        ruta_empresas_dbf = os.path.join(path_base, "empresas.dbf")
+        if not os.path.exists(ruta_empresas_dbf):
+            print(f"Error: No se encontró EMPRESAS.DBF en {path_base}")
+            return None
+
+    # 2. Leer EMPRESAS.DBF y mapear la empresa
+    try:
+        table = DBF(ruta_empresas_dbf, encoding="cp850", ignore_missing_memofile=True)
+        for record in table:
+            emp_nombre = str(record.get("EMPRESA", "")).strip()
+            if emp_nombre.upper() == nombre_empresa.strip().upper():
+                return {
+                    "empresa": emp_nombre,
+                    "directorio": str(record.get("DIRECTORIO", "")).strip()  # ej: "EMP4"
+                }
+    except Exception as e:
+        print(f"Error al leer {ruta_empresas_dbf}: {e}")
+
+    return None
